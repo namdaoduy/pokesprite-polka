@@ -1,11 +1,13 @@
 import { createContext } from 'contexts/utils';
-import { useCallback } from 'react';
-import { useForm, UseFormRegister, UseFormReset, UseFormSetValue, UseFormWatch } from 'react-hook-form';
+import { useCallback, useEffect } from 'react';
+import { useForm, UseFormRegister, UseFormSetValue, UseFormWatch } from 'react-hook-form';
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { PokemonData, PokemonDataMap } from 'types/pokemon';
+import { SettingPresets } from 'constants/settings';
 
 export type SettingsFormValue = {
+  presetId: string;
   canvasWidth: number;
   canvasHeight: number;
   spriteWidth: number;
@@ -24,10 +26,16 @@ export type SettingsFormValue = {
   shufflePokemonsSeed: number;
 }
 
+export type SettingsPreset = {
+  id: string;
+  name: string;
+  settings: Partial<SettingsFormValue>;
+}
+
 export type SettingsContextValue = {
   register: UseFormRegister<SettingsFormValue>;
   watch: UseFormWatch<SettingsFormValue>;
-  reset: UseFormReset<SettingsFormValue>;
+  reset: (newPresetId?: SettingsPreset['id']) => void;
   setValue: UseFormSetValue<SettingsFormValue>;
   pokemonData: PokemonData | undefined;
   pokemonSprite: ImageBitmap | undefined;
@@ -35,37 +43,8 @@ export type SettingsContextValue = {
 
 export const [useSettingsContext, SettingsContext] = createContext<SettingsContextValue>();
 
-// canvasWidth: 900,
-// canvasHeight: 400,
-// spriteWidth: 40,
-// spriteHeight: 30,
-// spriteNumCol: 10,
-// drawWidth: 45,
-// drawHeight: 36,
-// drawNumCol: 20,
-// drawScale: 1,
-// enablePolka: true,
-// minPokemons: 215,
-// shufflePokemons: false,
-// shufflePokemonsSeed: 0,
-
-// canvasWidth: 900,
-// canvasHeight: 400,
-// spriteWidth: 40,
-// spriteHeight: 30,
-// spriteNumCol: 10,
-// drawWidth: 45,
-// drawHeight: 30,
-// drawNumCol: 20,
-// drawScale: 1,
-// horizontalPadding: 0,
-// verticalPadding: 0,
-// enablePolka: true,
-// minPokemons: 254,
-// shufflePokemons: false,
-// shufflePokemonsSeed: 0,
-
 const getDefaultSettings = (): SettingsFormValue => ({
+  presetId: SettingPresets[0].id,
   canvasWidth: 900,
   canvasHeight: 400,
   drawScale: 1,
@@ -76,13 +55,13 @@ const getDefaultSettings = (): SettingsFormValue => ({
   spriteWidth: 40,
   spriteHeight: 30,
   spriteNumCol: 10,
-  horizontalPadding: 8,
-  verticalPadding: 9,
+  horizontalPadding: 0,
+  verticalPadding: 0,
   enablePolka: true,
-  minPokemons: 228,
+  minPokemons: 0,
   shufflePokemons: false,
   shufflePokemonsSeed: 0,
-}); 
+});
 
 export const SettingsContextProvider = ({
   children,
@@ -94,15 +73,28 @@ export const SettingsContextProvider = ({
     watch,
     reset,
     setValue,
+    getValues,
   } = useForm<SettingsFormValue>({
     defaultValues: getDefaultSettings(),
   });
 
-  const resetFormValue = useCallback((...params: Parameters<UseFormReset<SettingsFormValue>>) => {
-    if (params.length === 0) {
-      reset(getDefaultSettings());
+  const presetId = watch('presetId');
+
+  const resetFormValue = useCallback((newPresetId?: SettingsPreset['id']) => {
+    const selectedPresetId = newPresetId || getValues().presetId;
+    const foundPreset = SettingPresets.find((preset) => preset.id === selectedPresetId);
+    let newSettings = {
+      ...getDefaultSettings(),
+    };
+    if (foundPreset) {
+      newSettings = {
+        ...getDefaultSettings(),
+        ...foundPreset.settings,
+      };
     }
-  }, [reset]);
+    newSettings.presetId = selectedPresetId;
+    reset(newSettings);
+  }, [getValues, reset]);
 
   const { data: pokemonData } = useQuery({
     queryKey: ['pokemon'],
@@ -144,6 +136,13 @@ export const SettingsContextProvider = ({
       }
     },
   });
+
+  useEffect(() => {
+    if (!presetId) {
+      return;
+    }
+    resetFormValue(presetId);
+  }, [presetId, resetFormValue]);
 
   const contextValue = {
     register,
